@@ -1,0 +1,103 @@
+---
+title: "ESG (E) Scoring Model"
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  pdf_document: default
+---
+
+# ESG Environmental Scoring Model
+
+## Overview
+
+This project develops an Environmental (E) scoring model for technology companies using environmental sustainability metrics. The model standardizes multiple indicators onto a common 0–100 scale and calculates a composite environmental score for each company.
+
+## Metrics Used
+
+-   Gross CO₂ emissions (`tons_co2_gross`)
+-   Renewable energy usage (`percent_renewable_energy`)
+-   Water withdrawal (`waterwithdrawl_liters`)
+
+## Methodology
+
+### Data Cleaning
+
+-   Standardized column names using `janitor::clean_names()`
+-   Removed blank rows
+-   Removed unused columns
+-   Converted water withdrawal values to numeric format
+
+### Normalization
+
+Each metric is transformed to a 0–100 scale using min-max normalization:
+
+\`\`\`r (x - min(x)) / (max(x) - min(x)) \* 100
+
+```{r}
+library(tidyverse)
+library(janitor)
+
+esg <- read_csv("/Users/lizabeigel/Desktop/esgScoringModel.csv", show_col_types = FALSE)
+
+# Clean Data
+esg <- esg %>% #%>% pipe means take this and pass it to the next step
+  clean_names() %>% #converts column titles lowercase snakecase
+  filter(!is.na(company)) %>% #! means not, is.na checks if missing, gets rid of blank rows
+  select(-any_of(c("source", "...5"))) %>% #drops unwanted columns, - means remove
+  mutate(
+    waterwithdrawl_liters = as.numeric(gsub(",", "", waterwithdrawl_liters))
+  ) #modifys columns to replace , with nothing text -> number
+
+# Normalize
+# normalizing converts every metric to same 0-100 scale, where 0 is worst and 100 is best
+# subtract min, divide by range, multiply by 100
+
+normalize <- function(x, higher_is_better = TRUE) {
+  scaled <- (x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE)) * 100
+  if (!higher_is_better) scaled <- 100 - scaled
+  return(scaled)
+}
+
+esg <- esg %>% #applies normalize function on each column
+  mutate(
+    emissions_score = normalize(tons_co2_gross, higher_is_better = FALSE),
+    renewable_score = normalize(percent_renewable_energy, higher_is_better = TRUE),
+    water_score = normalize(waterwithdrawl_liters, higher_is_better = FALSE)
+  )
+
+# Calculate mean scores
+esg <- esg %>%
+  mutate(
+    e_score = rowMeans(cbind(emissions_score, renewable_score, water_score), na.rm = TRUE)
+  ) #energy score is the mean of the rows, cbind merges the columns, na.rm = TRUE means exclude NA values
+
+# Ranking
+esg %>% select(company, e_score) %>% arrange(desc(e_score)) #from companies and scores, arrange in descending order
+
+# Visualization
+ggplot(esg, aes(x = reorder(company, e_score), y = e_score)) +
+  geom_col() +
+  coord_flip() +
+  labs(
+    title = "Environmental Scores of Tech Companies",
+    x = "Company",
+    y = "E Score"
+  )
+
+# Scatter plot: Emissions Score vs E Score
+plot(esg$emissions_score,
+     esg$e_score,
+     main = "Emissions Score vs ESG Score",
+     xlab = "Emissions Score (0-100)",
+     ylab = "ESG Score",
+     pch = 19
+)
+
+text(esg$emissions_score,
+     esg$e_score,
+     labels = esg$company,
+     pos = 2,
+     cex = 0.8
+)
+```
