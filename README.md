@@ -1,0 +1,1 @@
+This project develops an Environmental (E) scoring model for technology companies using environmental sustainability metrics. The model standardizes multiple indicators onto a common 0–100 scale and calculates a composite environmental score for each company.
